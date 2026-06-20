@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MICU → Floor Admitting Router</title>
+<style>
+  :root{
+    --ink:#0e1c24; --ink2:#15303b;
+    --paper:#eef2f3; --card:#ffffff; --line:#dde5e8; --line2:#eef2f4;
+    --muted:#5d6e78; --text:#16242c;
+    --us:#0f766e;      --us-bg:#e6f4f1;
+    --call:#1f54c4;    --call-bg:#e8eefb;
+    --med:#b45309;     --med-bg:#fbeede;
+    --peds:#6d28d9;    --peds-bg:#efe9fb;
+    --warn:#b42318;    --warn-bg:#fbe9e7;
+    --focus:#0f766e;
+    --r:14px;
+    --fs:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--paper);color:var(--text);font-family:var(--fs);-webkit-text-size-adjust:100%}
+  body{padding:18px 14px 60px;display:flex;justify-content:center}
+  .app{width:100%;max-width:560px}
+
+  /* Header */
+  .head{background:var(--ink);color:#eaf2f3;border-radius:var(--r);padding:16px 18px;position:relative;overflow:hidden}
+  .head:before{content:"";position:absolute;inset:0;background:
+     radial-gradient(120% 90% at 100% 0%, rgba(15,118,110,.45), transparent 60%);pointer-events:none}
+  .kicker{font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;color:#7fb7b2;font-weight:700;margin:0 0 4px}
+  .h1{font-size:19px;font-weight:750;letter-spacing:-.01em;margin:0;line-height:1.15}
+  .sub{font-size:12.5px;color:#a9c3c5;margin:6px 0 0}
+  .reset{position:absolute;top:14px;right:14px;background:rgba(255,255,255,.08);color:#dcebec;border:1px solid rgba(255,255,255,.16);
+     font-size:11px;font-weight:650;letter-spacing:.02em;padding:7px 11px;border-radius:9px;cursor:pointer}
+  .reset:hover{background:rgba(255,255,255,.16)}
+
+  /* Path rail */
+  .path{margin:14px 2px 2px;display:flex;flex-direction:column;gap:0}
+  .pnode{display:flex;gap:11px;align-items:flex-start;min-height:30px}
+  .pdot{flex:0 0 auto;width:18px;display:flex;flex-direction:column;align-items:center}
+  .pdot i{width:11px;height:11px;border-radius:50%;background:var(--line);border:2px solid var(--card);box-shadow:0 0 0 1.5px var(--line);margin-top:3px}
+  .pdot .bar{width:2px;flex:1;background:var(--line);min-height:14px;margin:2px 0}
+  .pnode.done .pdot i{background:var(--us);box-shadow:0 0 0 1.5px var(--us)}
+  .pnode.done .pdot .bar{background:var(--us)}
+  .pnode.active .pdot i{background:var(--ink);box-shadow:0 0 0 1.5px var(--ink);animation:pulse 1.6s infinite}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 1.5px var(--ink)}50%{box-shadow:0 0 0 4px rgba(14,28,36,.18)}}
+  .ptext{padding-bottom:11px;flex:1;min-width:0}
+  .plabel{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:700}
+  .pans{font-size:14px;font-weight:600;color:var(--text);margin-top:1px}
+  .pnode.pending .plabel,.pnode.pending .pans{opacity:.45}
+
+  /* Step card */
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:18px;margin-top:14px;
+     box-shadow:0 1px 0 rgba(16,40,50,.02),0 10px 26px -22px rgba(16,40,50,.5);animation:rise .28s ease both}
+  @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .q{font-size:17px;font-weight:700;letter-spacing:-.01em;line-height:1.25;margin:0 0 3px}
+  .qhint{font-size:12.5px;color:var(--muted);margin:0 0 14px;line-height:1.45}
+  .opts{display:flex;flex-direction:column;gap:9px}
+  .opt{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:#fbfdfd;border:1.5px solid var(--line);
+     border-radius:11px;padding:13px 14px;cursor:pointer;font:inherit;color:var(--text);transition:.13s}
+  .opt:hover{border-color:var(--ink2);background:#f3f8f8}
+  .opt:focus-visible{outline:3px solid color-mix(in srgb,var(--focus) 35%,transparent);outline-offset:1px}
+  .opt b{font-size:14.5px;font-weight:680}
+  .opt span{font-size:12px;color:var(--muted);display:block;margin-top:2px;font-weight:500}
+  .opt .ic{flex:0 0 auto;width:30px;height:30px;border-radius:8px;display:grid;place-items:center;font-size:15px;
+     background:var(--us-bg);color:var(--us);font-weight:800}
+  .opt.alt .ic{background:var(--call-bg);color:var(--call)}
+  .opt.flat .ic{background:var(--line2);color:var(--muted)}
+  .grow{flex:1;min-width:0}
+
+  /* Search */
+  .srch{position:relative}
+  .srch input{width:100%;border:1.5px solid var(--line);border-radius:11px;padding:13px 14px;font:inherit;font-size:15px;background:#fbfdfd}
+  .srch input:focus{outline:none;border-color:var(--focus);box-shadow:0 0 0 3px color-mix(in srgb,var(--focus) 18%,transparent)}
+  .results{margin-top:8px;border:1px solid var(--line);border-radius:11px;overflow:hidden;max-height:300px;overflow-y:auto;display:none}
+  .results.show{display:block}
+  .ritem{padding:11px 13px;border-bottom:1px solid var(--line2);cursor:pointer;display:flex;justify-content:space-between;gap:10px;align-items:center}
+  .ritem:last-child{border-bottom:0}
+  .ritem:hover,.ritem.kbd{background:#f1f7f7}
+  .rname{font-size:14px;font-weight:640}
+  .rmeta{font-size:11.5px;color:var(--muted);margin-top:1px}
+  .rtag{flex:0 0 auto;font-size:10px;font-weight:750;letter-spacing:.04em;text-transform:uppercase;padding:4px 8px;border-radius:999px;white-space:nowrap}
+  .t-med{background:var(--med-bg);color:var(--med)} .t-call{background:var(--call-bg);color:var(--call)}
+  .t-peds{background:var(--peds-bg);color:var(--peds)} .t-us{background:var(--us-bg);color:var(--us)}
+  .nohit{padding:14px;font-size:13px;color:var(--muted);text-align:center}
+  .nohit b{color:var(--text)}
+
+  /* Result card */
+  .res{border-radius:var(--r);padding:0;overflow:hidden;border:1px solid var(--line);margin-top:14px;animation:rise .3s ease both}
+  .res .banner{padding:15px 18px;color:#fff;display:flex;align-items:center;gap:13px}
+  .res .banner .bic{width:36px;height:36px;border-radius:9px;background:rgba(255,255,255,.18);display:grid;place-items:center;font-size:19px;flex:0 0 auto}
+  .res .banner .blab{font-size:10px;letter-spacing:.18em;text-transform:uppercase;font-weight:700;opacity:.9}
+  .res .banner .bbig{font-size:18px;font-weight:760;letter-spacing:-.01em;line-height:1.15;margin-top:2px}
+  .res.us .banner{background:var(--us)} .res.call .banner{background:var(--call)}
+  .res.med .banner{background:var(--med)} .res.peds .banner{background:var(--peds)}
+  .res .body{background:var(--card);padding:16px 18px}
+  .action{font-size:14.5px;line-height:1.5;font-weight:560;margin:0 0 4px}
+  .action b{font-weight:740}
+  .callbtn{display:flex;align-items:center;gap:11px;text-decoration:none;margin-top:12px;border:1.5px solid var(--line);
+     border-radius:11px;padding:12px 14px;background:#fbfdfd;color:var(--text)}
+  .callbtn:hover{border-color:var(--ink2);background:#f3f8f8}
+  .callbtn .pic{width:34px;height:34px;border-radius:8px;background:var(--call-bg);color:var(--call);display:grid;place-items:center;font-size:16px;flex:0 0 auto}
+  .callbtn .who{font-size:14px;font-weight:680} .callbtn .num{font-size:13px;color:var(--muted);margin-top:1px;font-variant-numeric:tabular-nums}
+  .ext{display:inline-flex;align-items:center;gap:8px;margin-top:12px;background:var(--med-bg);color:var(--med);border-radius:10px;padding:11px 13px;font-size:13.5px;font-weight:650}
+  .ext .pic{width:30px;height:30px;border-radius:7px;background:rgba(180,83,9,.16);display:grid;place-items:center;font-size:15px}
+
+  .detail{margin-top:13px;border-top:1px solid var(--line2);padding-top:12px;display:grid;grid-template-columns:auto 1fr;gap:5px 14px;font-size:12.5px}
+  .detail dt{color:var(--muted);font-weight:600} .detail dd{margin:0;font-weight:550}
+  .stale{color:var(--warn);font-weight:650}
+
+  .confirm{margin-top:14px;background:#f7fafa;border:1px solid var(--line);border-radius:12px;padding:14px}
+  .confirm p{margin:0 0 10px;font-size:13.5px;font-weight:620}
+  .crow{display:flex;gap:9px}
+  .cbtn{flex:1;border:1.5px solid var(--line);background:#fff;border-radius:10px;padding:11px;font:inherit;font-size:13px;font-weight:670;cursor:pointer}
+  .cbtn.yes{border-color:var(--us);color:var(--us)} .cbtn.yes:hover{background:var(--us-bg)}
+  .cbtn.no{border-color:var(--med);color:var(--med)} .cbtn.no:hover{background:var(--med-bg)}
+
+  .again{margin-top:14px;width:100%;border:1.5px solid var(--ink2);background:var(--ink);color:#eaf2f3;border-radius:11px;padding:13px;font:inherit;font-size:14px;font-weight:680;cursor:pointer}
+  .again:hover{background:var(--ink2)}
+  .back{background:none;border:0;color:var(--muted);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;margin-top:12px;padding:4px}
+  .back:hover{color:var(--text)}
+
+  /* Protocol */
+  details.proto{margin-top:16px;background:var(--card);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+  details.proto>summary{list-style:none;cursor:pointer;padding:14px 16px;font-size:13px;font-weight:700;display:flex;justify-content:space-between;align-items:center;color:var(--text)}
+  details.proto>summary::-webkit-details-marker{display:none}
+  details.proto>summary .chev{color:var(--muted);transition:.2s} details.proto[open]>summary .chev{transform:rotate(90deg)}
+  .ptable{padding:0 16px 14px}
+  .prow{display:flex;gap:11px;padding:10px 0;border-top:1px solid var(--line2);align-items:flex-start}
+  .prow:first-child{border-top:0}
+  .pcond{flex:1;font-size:12.5px;color:var(--text);font-weight:550}
+  .pout{flex:0 0 auto;font-size:10px;font-weight:750;letter-spacing:.04em;text-transform:uppercase;padding:5px 9px;border-radius:999px;white-space:nowrap}
+  .foot{text-align:center;font-size:11px;color:var(--muted);margin-top:16px;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="head">
+    <button class="reset" id="reset">Restart</button>
+    <p class="kicker">MICU → Floor Transfer</p>
+    <h1 class="h1">Admitting Router</h1>
+    <p class="sub">Answer each step to land the patient on the right service and the right phone call.</p>
+  </div>
+
+  <div class="path" id="path"></div>
+  <div id="stage"></div>
+
+  <details class="proto">
+    <summary>Protocol at a glance <span class="chev">›</span></summary>
+    <div class="ptable" id="ptable"></div>
+  </details>
+
+  <p class="foot">Decision aid only — confirm the PMD's current admitting status on EmReference.com or the group chat. Directory snapshot is editable in the source.</p>
+</div>
+
+<script>
+const DATA = [["Abano, Adoreli APN","","Geriatrics","Hospitalist","x4929","","07/06/2018"],["Abbasi, Tareef","(973) 928-5500","","Sen, Sourav (HVA Covering 2/18/26)","(973) 553-5697","","03/05/2019"],["Abbassi, Saeed","","Pediatrics","Hospitalist","x4929","Riverside Medical Group","14/02/2025"],["Abdel-Wahab, Ayman","","Gastroenterology","Hospitalist","x4929","Riverside Medical Group","14/02/2025"],["Abdulmassih, Sami","(973) 754-4060","","Hospitalist","x4929","","26/10/2021"],["Abdy, Victor","(973) 790-3232","","Hospitalist","x4929","","01/03/2024"],["Abraham, Alice","","","Hospitalist","x4929","","17/02/2022"],["Abramson, Marla","(201) 939-8834","","Hospitalist","x4929","Summit Medical Group","11/07/2019"],["Achuthan, Vindya","","","Hospitalist","x4929","","17/02/2022"],["Adessa, Kenneth","(973) 768-8105","","Hospitalist","x4929","Barnabas Medical Group",""],["Adler, Joel","(201) 928-0200","","Hospitalist","x4929","Aspen Medical",""],["Agarwal, Ashoke","(973) 684-8617","Cardiology","HVA Admitting Team","(201) 490-1217","","16/01/2021"],["Ahmed, Amina","(201) 939-8834","","Hospitalist","x4929","Summit Medical Group","11/07/2019"],["Ahmed, Fuad","","","HVA Admitting Team","(201) 490-1217","","25/05/2019"],["Ahmed, Suhel","","","Hospitalist","x4929","Advanced Medical Group","11/02/2020"],["Ahsan, Ambreen","","Pediatrics","Pediatric Hospitalist","","","18/01/2019"],["Alberaqdar, Enis","(973) 925-4850","","Pinzon","","","24/07/2025"],["Alday, Arnold","(973) 546-6844","","Hospitalist","x4929","Barnabas Health","11/07/2019"],["Alfakir, Maria","","","Pinzon","","","24/07/2025"],["Ali, Ami","(201) 666-3900","","Hospitalist","x4929","Old Hook Medical",""],["Ali, Sabia","(201) 858-6572","","Hospitalist","x4929","",""],["Anshelevich, Irina","(201) 986-1881","","Hospitalist","x4929","Forest Medical",""],["Aqel, Mahmoud","","","Aqel, Mahmoud","","","16/01/2021"],["Ardito, Michael","(973) 835-7290","","Hospitalist","x4929","Valley Medical Group","10/06/2018"],["Arnouk, Munzer","(973) 942-5224","","Hospitalist","x4929","","11/07/2019"],["Asokan, Rengaswamy","(973) 523-3400","","HVA Admitting Team","(201) 490-1217","","16/01/2021"],["Atreja, Surabhi","(973) 942-1141","Cardiology","Hospitalist","x4929","Advanced Cardiology Practice",""],["Audia, Pat","(973) 653-3366","Nephrology","Hospitalist","x4929","North Jersey Nephrology Associated",""],["Avancha, Amarnath","(973) 777-1132","Cardiology","HVA Admitting Team","(201) 490-1217","","16/01/2021"],["Avezzano, Eric","(201) 967-8221","Gastroenterology","Hospitalist","x4929","Bergen Medical Associates/Bergen Gastroenterology",""],["Awad, Safwat","(973) 345-1443","","Awad, Safwat","(973) 345-1443","",""],["Ayub, Ayesha","(201) 939-8834","","Hospitalist","x4929","Summit Medical Group","11/07/2019"],["Baghal, Eyad","(973) 782-4871","Gastroenterology","Hospitalist","x4929","Riverside Medical Group","14/02/2025"],["Bagade, Vivek","(201) 666-3900","","Hospitalist","x4929","Old Hook Medical",""],["Baig, Mirza","","","Hospitalist","x4929","Summit Medical Group","07/06/2018"],["Bain, Frank","(973) 628-8500","","HVA Admitting Team","(201) 490-1217","","16/01/2021"],["Bassan, Matthew","(973) 636-9000","","Hospitalist","x4929","Vanguard Medical Group",""],["Batarseh, Basel","(201) 797-2003","","Sen, Sourav (HVA Covering 2/18/26)","(973) 553-5697","",""],["Bauer, Francis","(973) 256-5557","","HVA Admitting Team","(201) 490-1217","","24/03/2023"],["Baum, Howard","(201) 939-8834","","Hospitalist","x4929","Summit Medical Group","11/07/2019"],["Becker, Steven","(201) 797-3040","","Becker, Steven","(201) 797-3040","",""],["Beenstock, Steven","(201) 529-0033","","Sen, Sourav (HVA Covering 2/18/26)","(973) 553-5697","",""],["Bell, Alvin","(973) 783-6110","","Sen, Sourav (HVA Covering 2/18/26)","(201) 490-1217","",""],["Bellardini, Angelo","(973) 256-5557","","HVA Admitting Team","(201) 490-1217","","16/01/2021"],["Bellomo, Alyse","(201) 967-8221","Gastroenterology","Hospitalist","x4929","Bergen Medical Associates/Bergen Gastroenterology",""],["Benn, Howard","(201) 414-9840","","HVA Admitting Team","(201) 490-1217","","16/01/2021"],["Bernstein, Stanley","(973) 248-1440","","Hafez, Nagwa","(973) 790-3433","","16/07/2021"],["Bhaskarabhatia, Krishna","(973) 812-1010","","Bhaskarabhatia, Krishna","(973) 812-1010","",""],["Bikkina, Mahesh","(201) 475-5050","Cardiology","HVA Admitting Team","(201) 490-1217","","16/01/2021"],["Blecker, Michael","(201) 939-8834","","Hospitalist","x4929","Summit Medical Group","11/07/2019"],["Bojito-Marrero, Lizza","(201) 939-8834","","Hospitalist","x4929","Summit Medical Group",""],["Bollu, Janardhan","(973) 754-9600","","Sen, Sourav (HVA Covering 2/18/26)","(973) 553-5697","",""],["Bonheur, Magnolita APN","(201) 339-6111","","Hospitalist","x4929","Barnabas Health",""],["Boorujy, Dean","(201) 939-8834","","Hospitalist","x4929","Summit Medical Group","11/07/2019"],["Boutros, Maged","(973) 777-3711","","Hospitalist","x4929","","18/12/2019"],["Boxer, Andrew","","","Hospitalist","x4929","Barnabas Health",""],["Boyajian, Robert","(201) 865-3100","","Hospitalist","x4929","",""],["Brisman, Daniel","(201) 928-0200","","Hospitalist","x4929","Aspen Medical",""],["Brodkin, Lisa","(201) 939-8834","","Hospitalist","x4929","Summit Medical Group","11/07/2019"],["Brown, Elliot","","Cardiology","Sen, Sourav (HVA Covering 2/18/26)","(973) 553-5697","Prakash for Cardio","02/12/2020"],["Cantor, William","(201) 666-3900","","Hospitalist","x4929","Old Hook Medical",""],["Capitanelli, John","(973) 256-5667","Cardiology","Hospitalist","x4929","",""],["Carrazzone, Peter MD","(973) 636-9000","","Hospitalist","x4929","Vanguard Medical Group","16/02/2026"],["Chabla, Juan","(212) 568-6156","","Hospitalist","x4929","",""],["Chandran, Chandra","(973) 653-3366","","Hospitalist","x4929","North Jersey Nephrology Associated",""],["Chaney, Arthur","(201) 343-5035","","Hospitalist","x4929","Hackensack Medical Group",""],["Chang, Cindy","(201) 986-1881","","Hospitalist","x4929","Forest Medical",""],["Charlap, Shlomo","(973) 472-2100","","Hospitalist","x4929","Summit Medical Group",""],["Chatterjee, Deelip","(973) 977-2250","","Call First - Will Direct Admission","","","24/07/2025"],["Chava, Padma","(201) 939-8834","","Hospitalist","x4929","Summit Medical Group",""],["Chavez, Laura","(201) 487-3355","","Hospitalist","x4929","Excelcare Medical Associates, PA",""],["Chen, Ivan","(973) 777-7911","Pain Mgt","Hospitalist","x4929","Summit Medical Group",""],["Chennapragada, Kausalya","(973) 812-1010","Pediatrics","Chennapragada, Kausalya","(973) 812-1010","",""],["Cho, Soung Ick","(201) 475-5050","Cardiology","HVA Admitting Team","(201) 490-1217","","16/01/2021"],["Chow, Jessica","(973) 925-7770","","Hospitalist","x4929","","16/01/2023"],["Chua, Krystle","(973) 595-8800","","Kahf, Yusuf Mohammed","","","31/08/2025"],["Chung, Jeff","(201) 967-8221","Rheumatology","Hospitalist","x4929","Bergen Medical Associates/Bergen Gastroenterology",""],["Cirello, Richard","(973) 239-2600","","Hospitalist","x4929","Vanguard Medical Group","12/06/2018"],["Cisnero, Maria","(973) 925-5400","","Perez, Carlos","(973) 925-5400","","30/06/2021"],["Cohen, David","(973) 540-9700","","Cohen, David","(973) 540-9700","",""],["Conte, Daniel","(973) 478-1212","","Hospitalist","x4929","",""],["Conte, Kenneth","(973) 478-1212","","Hospitalist","x4929","",""],["Conte, Salvatore","(973) 790-8811","","Sen, Sourav (HVA Covering 2/18/26)","(973) 553-5697","",""],["Costello, Robert","(973) 942-5230","","Hafez, Nagwa","(973) 790-3433","","18/08/2024"],["Crabtree, Shawn","(973) 904-1177","","Hospitalist","x4929","",""],["Cullen, Holly","(201) 967-8221","Gastroenterology","Hospitalist","x4929","Bergen Medical Associates/Bergen Gastroenterology",""],["Daoko, Joseph","(973) 256-5667","Cardiology","Hospitalist","x4929","Cardiology Associates",""],["Das, Dhirendra","(201) 475-5050","Cardiology","HVA Admitting Team","(201) 490-1217","","16/01/2021"],["Daud-Ahmad, Sameera","(201) 666-3900","","Hospitalist","x4929","Old Hook Medical",""],["De Feo, Daniel","551-815-1000","","De Feo, Daniel","551-815-1000","Cell: 551-500-5708","09/08/2023"],["DeFeo, Daniel","551-815-1000","","DeFeo, Daniel","551-815-1000","Cell: 551-500-5708","09/08/2023"],["DeGiacomo, Frank","(201) 939-8834","","Hospitalist","x4929","Summit Medical Group",""],["Deingeniis-Depasquale, Antoinette","(973) 389-1800","","Hospitalist","x4929","High Mountain Health","02/12/2021"],["DeLillo, Anthony","(201) 967-8221","Gastroenterology","Hospitalist","x4929","Bergen Medical Associates/Bergen Gastroenterology",""],["DeMasi, Christopher","(201) 939-8834","","Hospitalist","x4929","Summit Medical Group","11/07/2019"],["Demuro, Paul","(973) 471-9494","","Sen, Sourav (HVA Covering 2/18/26)","(973) 553-5697","","23/10/2020"],["Desai, Veena","(201) 967-8221","Medicine","Hospitalist","x4929","Bergen Medical Associates/Bergen Gastroenterology",""],["Desai, Viren","(201) 997-0808","","Hospitalist","x4929","",""],["Desueza, Juan","(973) 684-8138","","HVA Admitting Team","(201) 490-1217","","23/12/2021"],["Dhaliwhal, Rita","(973) 389-1800","","Hafez, Nagwa","(973) 790-3433","High Mountain Health",""],["Dhindsa, Sumeet","(347) 871-7064","","HVA Admitting Team","(201) 490-1217","","16/01/2021"],["Dicovskiy, Marcela","(973) 278-1000","","Sen, Sourav (HVA Covering 2/18/26)","(973) 553-5697","","03/05/2019"],["Diaz, Franco (retired)","(201) 342-5350","","Hospitalist","x4929","",""],["Dmytrienko, Igor","(201) 670-9215","","Sen, Sourav (HVA Covering 2/18/26)","(973) 553-5697","",""],["Dombrowski, Mark","(201) 666-3900","","Hospitalist","x4929","Old Hook Medical",""],["Doroudi, Shideh","(973) 754-4100","","Clifton Family Practice","","",""],["Doss, Emile","(973) 942-7377","Cardiology","Doss, Emile (Call for his patients)","(973) 942-7377","",""],["Duffy, Joseph","(973) 942-0200","","Hospitalist","x4929","","30/06/2021"],["Duvvuri, Krishna","(862) 666-9210","Cardiology","HVA Admitting Team","(201) 490-1217","","16/01/2021"],["Eidus, Robert","(908) 272-7990","","Hospitalist","x4929","Vanguard Medical Group","12/06/2018"],["El Zein, Lama","(201) 939-8834","","Hospitalist","x4929","Summit Medical Group","11/07/2019"],["Elkholy, Naveen","(973) 278-2818","","Hospitalist","x4929","","11/07/2019"],["Englewood Health Network","","","Hospitalist (EXCEPT if PMD already admits to HVA)","x4929","","28/02/2022"],["Farkas, John","(973) 777-5717","","Hafez, Nagwa","(973) 790-3433","",""],["Faugno, Gerard","(201) 933-1480","","Hospitalist","x4929","Lyndhurst Family Practice",""],["Feinberg, Craig","(201) 939-8834","","Hospitalist","x4929","Summit Medical Group","11/07/2019"],["Feliciano, Joyce APN","(201) 288-6781","","Hospitalist","x4929","Heights Medical",""],["Fernandez, Marlyn","(201) 666-3900","Endocrine","Hospitalist","x4929","Old Hook Medical",""],["Ferrante, Maurice","(201) 939-8834","","Hospitalist","x4929","Summit Medical Group","11/07/2019"],["Ferraro, Lisa","(973) 742-1761","","HVA Admitting Team","(201) 490-1217","","16/01/2021"],["Fibison, Diana","(973) 546-6844","","Hospitalist","x4929","Barnabas Health",""],["Fields, Scott","(201) 939-8834","","Hospitalist","x4929","Summit Medical Group","11/07/2019"],["Fine, Alan","(201) 939-8834","","Hospitalist","x4929","Summit Medical Group","07/06/2018"],["Flanzman, Susan","(201) 967-8221","Medicine","Hospitalist","x4929","Bergen Medical Associates/Bergen Gastroenterology",""],["Flores, Jose","(201) 939-8834","","Hospitalist","x4929","Summit Medical Group","11/07/2019"],["Fried, Harry","(201) 666-3900","","Hospitalist","x4929","Old Hook Medical",""],["Fusilli, Louis","(973) 256-5667","Cardiology","Hospitalist","x4929","",""],["Gadarla, Mamatha","(973) 239-1600","","Hospitalist","x4929","",""],["Gaitour, Larisa","(201) 928-0200","","Hospitalist","x4929","Aspen Medical",""],["Gajdos, Robert","(973) 777-2005","","HVA Admitting Team","(201) 490-1217","","11/02/2020"],["Germinario, Carla","(201) 487-1677","","Hospitalist","x4929","",""],["Giangola, Joseph","(201) 986-1881","","Hospitalist","x4929","Forest Medical",""],["Giangrante, Matthew MD","(908) 272-7990","","Hospitalist","x4929","Vanguard Medical Group","16/02/2026"],["Gilmartin, Andrew","(973) 575-5540","","Hospitalist","x4929","","13/05/2024"],["Giuliano, Michael","(973) 661-1900","","Hospitalist","x4929","",""],["Glaubiger, Carol","(201) 666-3900","","Hospitalist","x4929","Old Hook Medical",""],["Gliksman, Michele","(201) 666-3900","OB/GYN","Hospitalist","x4929","Old Hook Medical",""],["Gokhale, Kedar","(201) 967-8221","Medicine","Hospitalist","x4929","Bergen Medical Associates/Bergen Gastroenterology",""],["Gold, Edward","(201) 666-3900","","Hospitalist","x4929","Old Hook Medical",""],["Gold, Jeffrey","(973) 305-8300","","HVA Admitting Team","(201) 490-1217","","16/01/2021"],["Goldstein, David","(201) 666-3900","","Hospitalist","x4929","Old Hook Medical",""],["Goldstein, Richard","(201) 666-3900","","Hospitalist","x4929","Old Hook Medical",""],["Gorman, Robert","(973) 239-2600","","Hospitalist","x4929","Vanguard Medical Group","12/06/2018"],["Goyal, Neil","(201) 939-8834","Cardiology","Summit Medical Group","","Summit Medical Group",""],["Graber, David","(201) 939-8834","","Hospitalist","x4929","Summit Medical Group","11/07/2019"],["Graziano, Vincent","(973) 653-3366","","Hospitalist","x4929","North Jersey Nephrology Associated",""],["Griggs, Allen","(201) 967-8221","Medicine","Hospitalist","x4929","Bergen Medical Associates/Bergen Gastroenterology",""],["Grossman, Steven","(201) 475-5050","Cardiology","HVA Admitting Team","(201) 490-1217","","16/01/2021"],["Grover, Arvind","(973) 366-6232","","Hospitalist","x4929","",""],["Grover, Pamela","(973) 366-6232","","Hospitalist","x4929","",""],["Gupta, Ajay","(973) 595-5345","Cardiology","HVA Admitting Team","(201) 490-1217","","16/01/2021"],["Gupta, Ramesh","(201) 794-8900","","HVA Admitting Team","(201) 490-1217","","16/01/2021"],["Gupta, Shabnam","(201) 339-6111","","Hospitalist","x4929","Barnabas Health",""],["Habib, Michael","(973) 653-5867","","Habib, Michael","(973) 653-5867","",""],["Hafez, Nagwa","(973) 790-3433","","Hafez, Nagwa","(973) 790-3433","",""],["Haghverdi, Mojdeh","(973) 837-8393","","Hafez, Nagwa","(973) 790-3433","",""],["Hajjar, Bassam","","","Hajjar, Bassam","","",""],["Hamadeh, Randa","(201) 339-6111","","Hospitalist","x4929","Barnabas Health",""],["Hannallah, Benyamin","(201) 714-4900","","Hannallah, Benyamin","(201) 714-4900","",""],["Hassanien, Gammal","(973) 523-4000","","Hospitalist","x4929","","16/09/2019"],["Hazzah, Marwa","(973) 546-6844","","Hospitalist","x4929","Barnabas Health","11/07/2019"],["Hochstein, Martin","(201) 967-8221","Endocrine","Hospitalist","x4929","Bergen Medical Associates/Bergen Gastroenterology",""],["Hoffman, Mark","(201) 339-6111","","Hospitalist","x4929","Barnabas Health",""],["Hossain, Shahreen","(973) 754-4200","","Hossain, Shahreen","(973) 754-4200","",""],["Iannetta, Frank","(973) 575-5540","","Hospitalist","x4929","","13/05/2024"],["Ibarbia, Jose","(201) 939-8834","","Hospitalist","x4929","Summit Medical Group",""],["Ibraham, Mohammad","(973) 569-4488","","Baghal, Eyad","(973) 782-4871","",""],["Ismail, Mourad","(201) 538-4460","","Hospitalist","x4929","",""],["Jacoboff, David","(201) 475-5050","Cardiology","Sen, Sourav (HVA Covering 2/18/26)","(973) 553-5697","Heart & Vascular Assoc. of North Jersey",""],["Jacowitz, Joel","(201) 666-3900","","Hospitalist","x4929","Old Hook Medical",""],["Jeyamohan, Shiveindra","(973) 633-1122","","Jeyamohan, Shiveindra","(973) 633-1122","Centers for Neurosurgery/Spine & Ortho","19/11/2020"],["Joffe, Libby","(973) 831-9222","","Hospitalist","x4929","",""],["Joseph, Rosy","(973) 632-8911","","Hospitalist","x4929","",""],["Julie, Edward","","Cardiology","Sen, Sourav (HVA Covering 2/18/26)","(973) 553-5697","Prakash for Cardio","02/12/2020"],["Kahf, Ahmad","(973) 942-3767","","Kahf, Yusuf Mohammed","(973) 942-3767","","31/08/2025"],["Kahf, Amr","(973) 595-8800","","Kahf, Yusuf Mohammed","","","31/08/2025"],["Kahf, Nizar","(973) 942-3767","","Kahf, Yusuf Mohammed","(973) 942-3767","","31/08/2025"],["Karateprak, Ohan","(201) 886-8877","","Hospitalist","x4929","",""],["Kaufman, Bradley","(201) 796-0300","","Hospitalist","x4929","",""],["Kavaler, Robert","(201) 986-1881","","Hospitalist","x4929","Forest Medical",""],["Kawam, Mohamed","(973) 942-3200","","Baghal, Eyad","(973) 782-4871","",""],["Kazmouz, Hasna","(973) 742-1824","","Hajjar, Bassam","(973) 689-6700","",""],["Khaddash, Ibrahim","","","Khaddash, Ibrahim","","","16/01/2021"],["Khan, Afshan","(201) 939-8834","","Hospitalist","x4929","Summit Medical Group","11/07/2019"],["Khatib, Omar","(706) 767-2238","Orthopedics","Khatib, Omar","(706) 767-2238","","24/10/2019"],["Kosc, Gary","(973) 812-8120","Gastroenterology","Hafez, Nagwa","(973) 790-3433","",""],["Kowal, Timothy","(201) 343-2434","Medicine","Hospitalist","x4929","Summit Medical Group",""],["Krisa, Paul","(973) 471-8850","","HVA Admitting Team","(201) 490-1217","HVA","19/01/2024"],["Krol, Ryszard","(973) 778-3111","Cardiology","Hospitalist","x4929","","24/07/2025"],["Krohn, Natan","(201) 339-6111","","Hospitalist","x4929","Barnabas Health",""],["Kumar, Rahul","(973) 253-8600","Cardiology","Kumar, Rahul","(973) 253-8600","",""],["Kurz, Jeremiah","(201) 986-1881","","Hospitalist","x4929","Forest Medical",""],["Kushner, Evan","(201) 986-1881","","Hospitalist","x4929","Forest Medical",""],["Laneve, Anthony","(973) 339-9755","","Sen, Sourav (HVA Covering 2/18/26)","(973) 553-5697","",""],["Lan, Vivian","(201) 967-8221","Medicine","Hospitalist","x4929","Bergen Medical Associates/Bergen Gastroenterology",""],["Lapsiwala, Pareen","(973) 575-5540","","Hospitalist","x4929","Vanguard Medical Group","12/06/2018"],["Lascari, Roland","(XXX) XXX-XXXX","","Sen, Sourav (HVA Covering 2/18/26)","(973) 553-5697","",""],["Lashin, Waleed","","","Makar, Gamil > Pinzon","","","14/10/2025"],["Laudadio, Richard","(201) 939-8834","","Hospitalist","x4929","Summit Medical Group","11/07/2019"],["Lee, Anna","(201) 928-0200","","Hospitalist","x4929","Aspen Medical",""],["Lee, George","(201) 928-0200","","Hospitalist","x4929","Aspen Medical",""],["Lee, Jenny","(201) 928-0200","","Hospitalist","x4929","Aspen Medical",""],["Lee, Karen","(201) 928-0200","","Hospitalist","x4929","Aspen Medical",""],["Leibu, Tonel","(201) 634-9160","","Hospitalist","x4929","",""],["Lesiczka, Adam","(973) 472-2912","","Hospitalist","x4929","",""],["Lesko, Richard","(201) 939-8834","","Hospitalist","x4929","Summit Medical Group","11/07/2019"],["Levine, Lester","(201) 666-3900","","Hospitalist","x4929","Old Hook Medical",""],["Levine, Robert","(201) 967-8221","Gastroenterology","Hospitalist","x4929","Bergen Medical Associates/Bergen Gastroenterology",""],["Liu, Elizabeth","(201) 587-8887","","HVA Admitting Team","(201) 490-1217","","16/01/2021"],["Livshits, Boris (OBS Only)","(201) 797-8914","","Hospitalist","x4929","",""],["Losardo, Anthony","(973) 256-5667","Cardiology","Hospitalist","x4929","","11/07/2019"],["Luna, Luis","(XXX) XXX-XXXX","","Pinzon","","","15/08/2025"],["Mainero, Michael","(973) 785-0102","Gastroenterology","Hafez, Nagwa","(973) 790-3433","",""],["Majersky, Stephen","(201) 343-2434","Medicine","Hospitalist","x4929","Summit Medical",""],["Mancheno, Mario","(XXX) XXX-XXXX","","Baghal, Eyad","(973) 782-4871","",""],["Mandal, Soma","(201) 939-8834","","Hospitalist","x4929","Summit Medical Group","11/07/2019"],["Mansour, Daniel","(551) 996-5960","","Mansour, Daniel","","HMMG Thoracic Surgery","29/10/2020"],["Mao, Chang-An","(862) 249-4904","","HVA Admitting Team","(201) 490-1217","","16/01/2021"],["Marani-Dicovskiy, Marcela","(973) 278-1000","","Sen, Sourav (HVA Covering 2/18/26)","(973) 553-5697","","03/05/2019"],["Marki, Richard","(201) 339-6111","","Hospitalist","x4929","Barnabas Health",""],["Martino, Michael","","Gastroenterology","Hafez, Nagwa","(973) 790-3433","",""],["Mascaro, Melissa MD","(973) 239-2600","","Hospitalist","x4929","Vanguard Medical Group",""],["Mathew, Alexander","(201) 339-6111","","Hospitalist","x4929","Barnabas Health",""],["Mazzela, Carmine DO","(973) 239-2600","","Hospitalist","x4929","Vanguard Medical Group","16/02/2026"],["McCarrick, Thomas MD","(973) 239-2600","","Hospitalist","x4929","Vanguard Medical Group","16/02/2026"],["McConnell, Julie","(201) 967-8221","Medicine","Hospitalist","x4929","Bergen Medical Associates/Bergen Gastroenterology",""],["Mehra, Sweeti","(201) 939-8834","","Hospitalist","x4929","Summit Medical Group","11/07/2019"],["Menacker, Morey","(201) 986-1881","","Hospitalist","x4929","Forest Medical",""],["Miqbel, Mohammad","(201) 858-6572","","Hospitalist","x4929","",""],["Molinaro, Michael","(973) 748-9246","","Hospitalist","x4929","",""],["Montana, Wilbur","(201) 342-5350","","Hospitalist","x4929","",""],["Moquete, Manuel","(973) 653-3366","Nephrology","Hospitalist","x4929","North Jersey Nephrology Associated",""],["Morone, John","(973) 942-5230","","Hafez, Nagwa","(973) 790-3433","","16/07/2021"],["Morris, Paul (OBS Only)","(201) 933-2370","","Hospitalist","x4929","Carlstadt Family Practice",""],["Motiwala, Neeta","(201) 967-8221","Medicine","Hospitalist","x4929","Bergen Medical Associates/Bergen Gastroenterology",""],["Muccino, Gary","(973) 546-6844","","Hospitalist","x4929","Barnabas Health",""],["Murray, Richard","(973) 239-2600","","Hospitalist","x4929","Vanguard Medical Group","12/06/2018"],["Mustafa, Akram","(201) 939-8834","","Hospitalist","x4929","Summit Medical Group","11/07/2019"],["Muttana, Renu","(917) 703-8679","","Hospitalist","x4929","",""],["Nabulsi, Omar","(973) 777-7727","","Hospitalist","x4929","","16/01/2023"],["Nadiminti, Sheila","(201) 460-0063","","Hospitalist","x4929","Barnabas Health",""],["Nagarwala, Faisal","(732) 491-3500","Family Medicine","Nagarwala, Faisal","(732) 491-3500","","25/03/2019"],["Nandigam, Purna Bindu","(973) 653-3366","Nephrology","Hospitalist","x4929","North Jersey Nephrology Associated",""],["Natelli, Anthony","(973) 835-2844","","HVA Admitting Team","(201) 490-1217","","16/01/2021"],["Neilan, Martin","(973) 790-8585","","Hafez, Nagwa","(973) 790-3433","","09/05/2022"],["Nelson, Richard","(201) 939-8834","","Hospitalist","x4929","Summit Medical Group","11/07/2019"],["Neno, Rosa","(201) 339-6111","","Hospitalist","x4929","Barnabas Health",""],["Nguyen, Steven","(973) 942-6005","","Hafez, Nagwa","(973) 790-3433","",""],["Notkin, Alicia","(973) 653-3366","Nephrology","Hospitalist","x4929","North Jersey Nephrology Associated",""],["Onat, Nermi","(973) 253-9666","","Hospitalist","x4929","","08/11/2021"],["Optum Medical Center","","","Hospitalist","x4929","","28/03/2025"],["Orr, David","(201) 489-1311","","Hospitalist","x4929","Northern NJ Pulmonary Assoc",""],["Pagano, Francesco","(201) 843-3152","","Hospitalist","x4929","Valley Medical Group","10/06/2018"],["Pallay, Arnold","(973) 575-5540","","Hospitalist","x4929","","13/05/2024"],["Panah, Manizheh","(973) 790-0006","","Hospitalist","x4929","",""],["Papish, Steven","","","Hospitalist","x4929","Summit Medical Group","11/07/2019"],["Parikh, Ashish","(201) 939-8834","","Hospitalist","x4929","Summit Medical Group","11/07/2019"],["Patel, Meera","(973) 697-6400","","HVA Admitting Team","(201) 490-1217","","16/01/2021"],["Patel, Mitul","(201) 967-8221","Gastroenterology","Hospitalist","x4929","Bergen Medical Associates/Bergen Gastroenterology",""],["Patel, Rima","","Cardiology","HVA Admitting Team","(201) 490-1217","","31/12/2018"],["Pavlou, George","(973) 812-8120","Gastroenterology","Hafez, Nagwa","(973) 790-3433","",""],["Pepe, Gary","(973) 389-1800","","Hafez, Nagwa","(973) 790-3433","High Mountain Health",""],["Perez, Raul","","","Perez, Carlos","","","30/06/2021"],["Pittman, Robert","(201) 967-8221","Gastroenterology","Hospitalist","x4929","Bergen Medical Associates/Bergen Gastroenterology",""],["Pondo, Jaroslaw","(201) 896-0050","","Hospitalist","x4929","",""],["Polkow, Melvin","(201) 489-1311","","Hospitalist","x4929","Northern NJ Pulmonary Assoc",""],["Prakash, Atul","(973) 253-8600","","Hospitalist","x4929","","24/07/2025"],["Prins, Edward","(201) 646-0001","","HVA Admitting Team","(201) 490-1217","","16/01/2021"],["Profeta, Susan","(201) 939-8834","","Hospitalist","x4929","Summit Medical Group","07/06/2018"],["Raake, Lisa","(201) 336-8111","","Hospitalist","x4929","Women's Health",""],["Radest, Joseph","(201) 986-1881","","Hospitalist","x4929","Forest Medical",""],["Rappaport, Jeffrey","","Dermatology","Makar, Gamil > Pinzon","(862) 249-4901","",""],["Rappaport, Liviu","(973) 956-1404","Pulmonary","Refaie, Tarek","","","15/10/2025"],["Rasa, David","(973) 389-1800","","Hafez, Nagwa","(973) 790-3433","High Mountain Health",""],["Rastogi, Raghav","(973) 748-9246","","Hospitalist","x4929","",""],["Ravi, Venkata","(973) 345-1044","","HVA Admitting Team","(201) 490-1217","","16/01/2021"],["Reydel, Boris","(973) 777-7911","","Hospitalist","x4929","Summit Medical Group",""],["Reyes, Bernadette","(973) 773-7443","","Hospitalist","x4929","","11/07/2019"],["Rizzo, Joseph","(201) 928-0200","","Hospitalist","x4929","Aspen Medical",""],["Rizzo, Robert","(973) 684-3663","","HVA Admitting Team","(201) 490-1217","","16/01/2021"],["Rodriguez, Jose","(973) 684-3130","","Sandoval, Ramon","(973) 684-8138","",""],["Rosenbaum, Robert","(201) 939-8834","","Hospitalist","x4929","Summit Medical Group",""],["Rosenberg, Jeffrey","(201) 939-8834","","Hospitalist","x4929","Summit Medical Group","11/07/2019"],["Rosenberg, Richard","(201) 967-8221","Gastroenterology","Hospitalist","x4929","Bergen Medical Associates/Bergen Gastroenterology",""],["Rosner, Steve","(201) 666-3900","","Hospitalist","x4929","Old Hook Medical",""],["Roth, Douglas","(201) 939-8834","","Hospitalist","x4929","Summit Medical Group","11/07/2019"],["Rubino, Gennaro","(973) 471-4004","","Hospitalist","x4929","","05/01/2023"],["Rutkowska, Ewa","(973) 942-8899","","Hospitalist","x4929","NJPC Subacute Physicians",""],["Saini, Harjinder","(973) 653-3366","Nephrology","Hospitalist","x4929","North Jersey Nephrology Associated",""],["Salama, Mohamed","(201) 939-8834","","Hospitalist","x4929","Summit Medical Group",""],["Salerno, Adrienne MD","(973) 636-9000","","Hospitalist","x4929","Vanguard Medical Group","16/02/2026"],["Salizzoni, Jeffrey","(201) 928-0200","","Hospitalist","x4929","Aspen Medical",""],["Sandoval, Ramon","(973) 684-8138","","HVA Admitting Team","(201) 490-1217","","23/12/2021"],["Schair, Barry","(973) 942-1141","Cardiology","Hospitalist","x4929","Advanced Cardiology Practice",""],["Schwartz, Gary (OBS Only)","(201) 488-8989","","Hospitalist","x4929","",""],["Schwarz, Michael","(973) 779-0019","","Hospitalist","x4929","","24/07/2025"],["Scolnick","","Cardiology","Sen, Sourav (HVA Covering 2/18/26)","(973) 553-5697","","02/12/2020"],["Sen, Sourav","(973) 553-5697","","Sen, Sourav (HVA Covering 2/18/26)","(973) 553-5697","","02/05/2019"],["Sgambati, Theodore","(201) 262-2333","","Hospitalist","x4929","Valley Medical Group","10/06/2018"],["Shah, Sanjay","(973) 653-3366","Nephrology","Hospitalist","x4929","North Jersey Nephrology Associated",""],["Shakibai, Nader","(201) 253-6996","Nephrology","Hospitalist","x4929","",""],["Shami, Joseph","(973) 812-5230","Gastroenterology","Hafez, Nagwa","(973) 790-3433","",""],["Shin, Yong","(973) 278-9800","","Sen, Sourav (HVA Covering 2/18/26)","(973) 553-5697","",""],["Siegel, Amy","(201) 225-2555","OB/GYN","Hospitalist","x4929","Bergen Womens Health",""],["Silverman, Matthew","(201) 845-4048","","Hospitalist","x4929","",""],["Singh, Amandeep","(201) 460-0063","","Hospitalist","x4929","Barnabas Health",""],["Singh, Malwinder","(201) 796-2709","","Hafez, Nagwa","(973) 790-3433","","29/09/2020"],["Singh, Sarva","(973) 779-9500","","HVA Admitting Team","(201) 490-1217","HVA Medical","05/10/2023"],["Sinha, Anjali","(201) 928-0200","","Hospitalist","x4929","Aspen Medical",""],["Soliman, Ishak","(973) 777-8900","","Sen, Sourav (HVA Covering 2/18/26)","(973) 553-5697","","02/05/2019"],["Solis, Roberto","(973) 569-6112","","Hospitalist","x4929","","28/03/2025"],["Soyombo, Aderemi","(201) 475-5050","Cardiology","HVA Admitting Team","(201) 490-1217","Heart & Vascular Assoc. of North Jersey",""],["Spinelli Drenth, Rosemarie APN","(201) 701-1044","","HVA Admitting Team","(201) 490-1217","","30/04/2020"],["Srikanth, Rashmi","(201) 939-8834","","Hospitalist","x4929","Summit Medical Group",""],["Stanislav, Goykhman","(201) 460-0063","","Hospitalist","x4929","Barnabas Health",""],["Stankiewicz, Danuta","(201) 843-3152","","Hospitalist","x4929","Valley Medical Group","10/06/2018"],["Strizhevsky, Marina","(201) 460-0063","","Hospitalist","x4929","Barnabas Health",""],["Suldan, Zalman","(201) 248-4182","","Hospitalist","x4929","",""],["Sweidan, Safwat","","","Sen, Sourav (HVA Covering 2/18/26)","(973) 553-5697","","23/06/2019"],["Syed, Sirajuddin","(201) 386-1400","","Hospitalist","x4929","Riverside Medical Group","14/02/2025"],["Szewczyk, Krystyna","(973) 473-4400","","Sen, Sourav (HVA Covering 2/18/26)","(973) 553-5697","","03/05/2019"],["Szwed, Stanley","(973) 471-6200","","Hospitalist","x4929","","24/07/2025"],["Tabachnick, John","(201) 939-8834","","Hospitalist","x4929","Summit Medical Group","11/07/2019"],["Tadros, Dalia","(973) 942-8899","","Hospitalist","x4929","NJPC Subacute Physicians",""],["Tailor, Amit","(201) 933-7611","","Hospitalist","x4929","Tailor Associates",""],["Tailor, Radhika","(201) 471-1401","","HVA Admitting Team","(201) 490-1217","","16/01/2021"],["Takvorian, Sylvia","(973) 942-8899","","Hospitalist","x4929","NJPC Subacute Physicians",""],["Tantawi, Mona","(201) 487-8222","","Hospitalist","x4929","Dr. Tantawi Assoc.",""],["Teicher, Mark","","Cardiology","Sen, Sourav (HVA Covering 2/18/26)","(973) 553-5697","Prakash for Cardio","02/12/2020"],["Tejeda, Carlos","(973) 773-0334","","Pinzon","","","14/04/2021"],["Tempesta, Sbrinal","(201) 967-8221","Medicine","Hospitalist","x4929","Bergen Medical Associates/Bergen Gastroenterology",""],["The, Andrew","(201) 262-3628","","Hospitalist","x4929","Drs. The",""],["The, Samuel","(201) 438-6916","","Hospitalist","x4929","Drs. The",""],["Thakar, Soja","(973) 653-3366","Nephrology","Hospitalist","x4929","North Jersey Nephrology Associated",""],["Tiyyagura, Satish","(201) 475-5050","Cardiology","HVA Admitting Team","(201) 490-1217","","16/01/2021"],["Toor, Saddad","(973) 942-1141","Cardiology","Hospitalist","x4929","Advanced Cardiology Practice",""],["Toussounian, Nora","(201) 336-8111","","Hospitalist","x4929","Women's Health",""],["Triolo, Diane","(973) 653-3366","Nephrology","Hospitalist","x4929","North Jersey Nephrology Associated",""],["Tsai, Wenchi","(973) 256-5667","Cardiology","Hospitalist","x4929","",""],["Vehra, Ijaz","(201) 475-5050","Cardiology","HVA Admitting Team","(201) 490-1217","","16/01/2021"],["Virk, Hartaj","(201) 475-5050","Cardiology","HVA Admitting Team","(201) 490-1217","","16/01/2021"],["Vitting, Kevin","(973) 389-1119","Nephrology","Baghal, Eyad","(973) 782-4871","",""],["Wardeh, Ghassan","(973) 942-4140","Pulmonary","Wardeh, Ghassan","(973) 942-4140","","07/01/2020"],["Weiss, Michael","","","[Call First]","(201) 245-0354","","07/02/2019"],["Yanagawa, Franz","","Surgery","Yanagawa, Franz","","","11/10/2019"],["Young, Alexis","(201) 666-3900","Dermatology","Hospitalist","x4929","Old Hook Medical",""],["Yousaf, Javed","(201) 986-1881","","Hospitalist","x4929","Forest Medical",""],["Yung, Karen","(973) 278-2600","","Silva, Waldemar","(877) 395-9190","",""],["Yussaf, Shiraz","(973) 256-5557","","HVA Admitting Team","(201) 490-1217","","16/01/2021"],["Zaina, Samir","","","Zaina, Samir","","",""],["Zeltser, Eugene","(973) 389-1119","Nephrology","Baghal, Eyad","(973) 782-4871","",""],["Zucker, Ira","(201) 666-3900","","Hospitalist","x4929","Old Hook Medical",""],["Riverside Medical Group","","","Hospitalist","x4929","Riverside Medical Group","14/02/2025"],["Summit Medical Group","","","Hospitalist","x4929","","28/03/2025"],["Valley Medical Group","","","Hospitalist","x4929","","28/03/2025"],["Valley Medical Group Cardiology","","","Hospitalist","x4929","","24/07/2025"],["Vanguard Medical Group","","","Hospitalist","x4929","","18/02/2026"]];
+const COLS = ["name","pmd","spec","admit","anum","group","upd"];
+const REC = DATA.map(r=>Object.fromEntries(COLS.map((c,i)=>[c,r[i]||""])));
+
+/* ---- classify a directory entry into a disposition ---- */
+function classify(e){
+  const a=(e.admit||"").toLowerCase();
+  if(a.startsWith("hospitalist") || a.includes("medical service")){
+    return {type:"med", label:"Medical Service", who:"Hospitalist", num:e.anum||"x4929",
+      action:`This PMD is covered by the <b>Hospitalist / medical service</b> in EmReference. Assign to <b>Medical Service</b> and call the Hospitalist.`};
+  }
+  if(a.includes("pediatric hospitalist")){
+    return {type:"peds", label:"Pediatric Hospitalist", who:"Pediatric Hospitalist", num:e.anum||"",
+      action:`Pediatric patient — route to the <b>Pediatric Hospitalist</b> team.`};
+  }
+  if(a.includes("hva admitting team")){
+    return {type:"call", label:"HVA Admitting Team", who:"HVA Admitting Team", num:e.anum||"(201) 490-1217",
+      action:`This PMD admits through <b>HVA</b>. Call the <b>HVA Admitting Team</b> to hand off.`, refusable:true};
+  }
+  if(a.includes("call first")){
+    return {type:"call", label:"Call First", who:(e.admit||"Attending"), num:e.anum||"",
+      action:`<b>Call first</b> — this PMD/attending will direct the admission.`, refusable:true};
+  }
+  // named private attending (incl. covering arrangements, "Makar > Pinzon", group names)
+  return {type:"call", label:"Private Attending", who:e.admit, num:e.anum||"",
+    action:`This PMD <b>admits here</b>. Call <b>${esc(e.admit)}</b> directly and hand off the admission.`, refusable:true};
+}
+function esc(s){return (s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+function telHref(num){const d=(num||"").replace(/[^0-9]/g,""); return (d.length>=7 && !/x4929/i.test(num))?("tel:"+d):null;}
+function stale(upd){ if(!upd) return false; const m=upd.match(/(\d{2})\/(\d{2})\/(\d{4})/); if(!m) return false;
+  const d=new Date(+m[3], +m[2]-1, +m[1]); return (Date.now()-d)/(1000*3600*24) > 730; }
+
+/* ---- state & flow ---- */
+let S = {ins:null, pmd:null, hiv:null, pick:null, accepted:null, step:"ins"};
+
+const path=document.getElementById('path');
+const stage=document.getElementById('stage');
+document.getElementById('reset').onclick=reset;
+
+function reset(){ S={ins:null,pmd:null,hiv:null,pick:null,accepted:null,step:"ins"}; render(); }
+
+function render(){ drawPath(); drawStage(); }
+
+function node(label,ans,state){
+  return `<div class="pnode ${state}"><div class="pdot"><i></i><div class="bar"></div></div>
+     <div class="ptext"><div class="plabel">${label}</div><div class="pans">${ans||"—"}</div></div></div>`;
+}
+function drawPath(){
+  const steps=[];
+  steps.push(["Insurance", S.ins==null?null:(S.ins?"Has insurance":"No insurance / self-pay")]);
+  if(S.ins){ steps.push(["PCP / PMD on Care Team", S.pmd==null?null:(S.pmd?"PMD listed":"None listed")]); }
+  if(S.ins && S.pmd){ steps.push(["PMD = our HIV clinic?", S.hiv==null?null:(S.hiv?"Yes":"No")]); }
+  if(S.ins && S.pmd && S.hiv===false){ steps.push(["PMD lookup", S.pick?S.pick.name:null]); }
+  if(S.pick && S.pick.disp && S.pick.disp.refusable && S.accepted!=null){
+    steps.push(["Attending response", S.accepted?"Accepted":"Refused"]);
+  }
+  const active = stepIndex();
+  path.innerHTML = steps.map((s,i)=>{
+    const st = i<active?"done":(i===active?"active":"pending");
+    return node(s[0], s[1], st);
+  }).join("");
+}
+function stepIndex(){
+  let i=0;
+  if(S.ins!=null) i++; if(S.ins===false) return i-1<0?0:i-1+0; // handled by outcome
+  if(S.ins){ if(S.pmd!=null) i++; }
+  if(S.ins&&S.pmd){ if(S.hiv!=null) i++; }
+  if(S.ins&&S.pmd&&S.hiv===false){ if(S.pick) i++; }
+  return Math.min(i, 6);
+}
+
+function drawStage(){
+  // terminal outcomes ------------------------------------------------
+  if(S.ins===false)               return outcome("us","No insurance / self-pay","Admit to <b>Our Service</b> — we take self-pay patients <b>any day</b>.");
+  if(S.ins && S.pmd===false)      return outcome("us","Insurance, no PMD listed","No PCP on the Care Team → admit to <b>Our Service</b>, regardless of day.");
+  if(S.ins && S.pmd && S.hiv===true) return outcome("us","Our HIV clinic patient","PMD is our <b>HIV clinic</b> → admit to <b>Our Service</b>, any day.");
+
+  if(S.pick){ return pickResult(); }
+
+  // questions --------------------------------------------------------
+  if(S.step==="ins") return ask({
+    q:"Does the patient have insurance?",
+    hint:"Start in the chart: check the insurance status and the Care Team section.",
+    opts:[
+      {cls:"", ic:"✓", t:"Has insurance", s:"Commercial, Medicare, Medicaid, etc.", go:()=>{S.ins=true;S.step="pmd";render();}},
+      {cls:"flat", ic:"○", t:"No insurance / self-pay", s:"→ Our Service, any day", go:()=>{S.ins=false;render();}}
+    ]});
+
+  if(S.step==="pmd") return ask({
+    q:"Is a PCP / PMD listed on the Care Team?",
+    hint:"Look at the Care Team section for a named Primary Care Provider.",
+    back:()=>{S.ins=null;S.step="ins";render();},
+    opts:[
+      {cls:"", ic:"✓", t:"Yes — a PMD is listed", s:"We'll look them up next", go:()=>{S.pmd=true;S.step="hiv";render();}},
+      {cls:"flat", ic:"○", t:"No PMD listed", s:"→ Our Service, regardless", go:()=>{S.pmd=false;render();}}
+    ]});
+
+  if(S.step==="hiv") return ask({
+    q:"Is the listed PMD our HIV clinic?",
+    hint:"HIV-clinic patients come to us regardless of day.",
+    back:()=>{S.pmd=null;S.step="pmd";render();},
+    opts:[
+      {cls:"alt", ic:"＋", t:"Yes — our HIV clinic", s:"→ Our Service, any day", go:()=>{S.hiv=true;render();}},
+      {cls:"", ic:"→", t:"No — a regular PMD", s:"Look up who admits for them", go:()=>{S.hiv=false;S.step="look";render();}}
+    ]});
+
+  if(S.step==="look") return lookup();
+}
+
+/* ---- generic question card ---- */
+function ask({q,hint,opts,back}){
+  stage.innerHTML = `<div class="card">
+    <p class="q">${q}</p><p class="qhint">${hint}</p>
+    <div class="opts">${opts.map((o,i)=>`<button class="opt ${o.cls}" data-i="${i}">
+      <span class="ic">${o.ic}</span><span class="grow"><b>${o.t}</b><span>${o.s}</span></span></button>`).join("")}</div>
+    ${back?'<button class="back" id="bk">‹ Back</button>':''}
+  </div>`;
+  [...stage.querySelectorAll('.opt')].forEach(b=>b.onclick=()=>opts[+b.dataset.i].go());
+  if(back) stage.querySelector('#bk').onclick=back;
+}
+
+/* ---- PMD search ---- */
+function lookup(){
+  stage.innerHTML = `<div class="card">
+    <p class="q">Look up the PMD</p>
+    <p class="qhint">Type the PMD's name as it appears in EmReference. The directory shows who admits their patients.</p>
+    <div class="srch">
+      <input id="q" type="text" autocomplete="off" placeholder="Start typing a name… e.g. Bikkina, Doss, Old Hook">
+      <div class="results" id="rl"></div>
+    </div>
+    <button class="back" id="bk">‹ Back</button>
+  </div>`;
+  const q=stage.querySelector('#q'), rl=stage.querySelector('#rl');
+  stage.querySelector('#bk').onclick=()=>{S.hiv=null;S.step="hiv";render();};
+  let kbd=-1, cur=[];
+  function run(){
+    const v=q.value.trim().toLowerCase();
+    if(v.length<1){ rl.className="results"; rl.innerHTML=""; return; }
+    cur=REC.filter(e=>e.name.toLowerCase().includes(v)||(e.group||"").toLowerCase().includes(v)||(e.spec||"").toLowerCase().includes(v)).slice(0,8);
+    rl.className="results show"; kbd=-1;
+    if(!cur.length){ rl.innerHTML=`<div class="nohit"><b>Not in this directory.</b><br>Default per protocol: <b>Medical Service</b> (Hospitalist, x4929). Verify on EmReference.com or the group chat.</div>`; return; }
+    rl.innerHTML=cur.map((e,i)=>{const d=classify(e);
+      return `<div class="ritem" data-i="${i}"><div><div class="rname">${esc(e.name)}</div>
+        <div class="rmeta">${esc([e.spec,e.group].filter(Boolean).join(" · ")||"—")}</div></div>
+        <span class="rtag t-${d.type}">${d.label}</span></div>`;}).join("");
+    [...rl.querySelectorAll('.ritem')].forEach(it=>it.onclick=()=>choose(cur[+it.dataset.i]));
+  }
+  q.addEventListener('input',run);
+  q.addEventListener('keydown',ev=>{
+    const items=[...rl.querySelectorAll('.ritem')]; if(!items.length) return;
+    if(ev.key==="ArrowDown"){ev.preventDefault();kbd=Math.min(kbd+1,items.length-1);}
+    else if(ev.key==="ArrowUp"){ev.preventDefault();kbd=Math.max(kbd-1,0);}
+    else if(ev.key==="Enter"){ev.preventDefault(); if(kbd>=0) choose(cur[kbd]); return;}
+    else return;
+    items.forEach((it,i)=>it.classList.toggle('kbd',i===kbd));
+  });
+  q.focus();
+}
+function choose(e){ S.pick={...e, disp:classify(e)}; S.accepted=null; render(); }
+
+/* ---- result for a chosen PMD ---- */
+function pickResult(){
+  const e=S.pick, d=e.disp;
+  // refusal flips refusable dispositions to Medical Service
+  if(d.refusable && S.accepted===false){
+    return outcome("med","PMD declined / not admitting","The PMD or attending <b>declined</b> the admission → assign to <b>Medical Service</b> (Hospitalist, x4929).", extraDetail(e));
+  }
+  const tel=telHref(d.num);
+  let contact="";
+  if(d.type==="med"){
+    contact=`<div class="ext"><span class="pic">＃</span><span>Hospitalist — <b>${esc(d.num||"x4929")}</b> (internal extension)</span></div>`;
+  } else if(d.num){
+    contact = tel
+      ? `<a class="callbtn" href="${tel}"><span class="pic">☎</span><span class="grow"><div class="who">Call ${esc(d.who)}</div><div class="num">${esc(d.num)}</div></span></a>`
+      : `<div class="callbtn"><span class="pic">☎</span><span class="grow"><div class="who">Call ${esc(d.who)}</div><div class="num">${esc(d.num)}</div></span></div>`;
+  } else {
+    contact = `<div class="callbtn"><span class="pic">☎</span><span class="grow"><div class="who">${esc(d.who)}</div><div class="num">No number on file — check EmReference / group chat</div></span></div>`;
+  }
+  let confirm="";
+  if(d.refusable && S.accepted==null){
+    confirm=`<div class="confirm"><p>Did ${esc(d.who)} accept the admission?</p>
+      <div class="crow">
+        <button class="cbtn yes" id="acc">Accepted — they admit</button>
+        <button class="cbtn no" id="ref">Refused</button>
+      </div></div>`;
+  }
+  const banner = d.type==="med" ? ["med","Assign to","Medical Service"]
+              : d.type==="peds"? ["peds","Route to","Pediatric Hospitalist"]
+              : ["call", S.accepted? "Confirmed — admit under":"Call to admit", d.who];
+
+  stage.innerHTML = `<div class="res ${banner[0]}">
+     <div class="banner"><div class="bic">${d.type==="med"?"＋":d.type==="peds"?"⊕":"☎"}</div>
+       <div><div class="blab">${banner[1]}</div><div class="bbig">${esc(banner[2])}</div></div></div>
+     <div class="body">
+       <p class="action">${d.action}</p>
+       ${contact}
+       ${confirm}
+       ${extraDetail(e)}
+       <button class="again" id="again">New patient</button>
+       <button class="back" id="bk">‹ Pick a different PMD</button>
+     </div></div>`;
+  stage.querySelector('#again').onclick=reset;
+  stage.querySelector('#bk').onclick=()=>{S.pick=null;S.accepted=null;S.step="look";render();};
+  if(d.refusable && S.accepted==null){
+    stage.querySelector('#acc').onclick=()=>{S.accepted=true;render();};
+    stage.querySelector('#ref').onclick=()=>{S.accepted=false;render();};
+  }
+}
+function extraDetail(e){
+  return `<dl class="detail">
+    <dt>PMD</dt><dd>${esc(e.name)}</dd>
+    ${e.spec?`<dt>Specialty</dt><dd>${esc(e.spec)}</dd>`:""}
+    ${e.group?`<dt>Group</dt><dd>${esc(e.group)}</dd>`:""}
+    <dt>EmRef admits</dt><dd>${esc(e.admit||"—")}${e.anum?` · ${esc(e.anum)}`:""}</dd>
+    ${e.upd?`<dt>Updated</dt><dd class="${stale(e.upd)?'stale':''}">${esc(e.upd)}${stale(e.upd)?" · verify, &gt;2 yrs old":""}</dd>`:""}
+  </dl>`;
+}
+
+/* ---- simple outcome (US / fallback) ---- */
+function outcome(type,label,text,extra){
+  const map={us:["☑","Admit to","Our Service"],med:["＋","Assign to","Medical Service"]};
+  const b=map[type]||map.us;
+  stage.innerHTML=`<div class="res ${type}">
+    <div class="banner"><div class="bic">${b[0]}</div>
+      <div><div class="blab">${b[1]}</div><div class="bbig">${b[2]}</div></div></div>
+    <div class="body"><p class="action"><b>${label}.</b> ${text}</p>
+      ${extra||""}
+      <button class="again" id="again">New patient</button></div></div>`;
+  stage.querySelector('#again').onclick=reset;
+}
+
+/* ---- protocol reference ---- */
+document.getElementById('ptable').innerHTML=[
+  ["No insurance / self-pay","us","Our Service"],
+  ["Insurance + no PMD listed","us","Our Service"],
+  ["Insurance + PMD is our HIV clinic","us","Our Service"],
+  ["Insurance + PMD admits here (private, HVA, or hospitalist group)","call","Call that PMD"],
+  ["Insurance + PMD refuses, or EmRef lists medical service","med","Medical Service"],
+].map(r=>`<div class="prow"><div class="pcond">${r[0]}</div><span class="pout t-${r[1]}">${r[2]}</span></div>`).join("");
+
+render();
+</script>
+</body>
+</html>
+Add new GitHub Actions workflow
