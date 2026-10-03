@@ -1,0 +1,14 @@
+{
+  "name": "Admission Router",
+  "short_name": "Admission Router",
+  "description": "Route each admission to the right service and the right phone call.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0e1c24",
+  "theme_color": "#0e1c24",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
