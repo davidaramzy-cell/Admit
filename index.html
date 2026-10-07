@@ -182,22 +182,22 @@ const REC = DATA.map(r=>Object.fromEntries(COLS.map((c,i)=>[c,r[i]||""])));
 /* ---- classify a directory entry into a disposition ---- */
 function classify(e){
   const a=(e.admit||"").toLowerCase();
-  // No admitting arrangement on file — default per protocol to Medical Service; verify.
+  // No admitting arrangement on file — default per protocol to Medical Service (Our Service); verify.
   if(!a){
-    return {type:"us", kick:"Admit to", label:"Medical Service", icon:"☑", who:"Medical Service (Our Service)", num:"",
+    return {type:"us", kick:"Admit to", label:"Medical Service (Our Service)", icon:"☑", who:"Medical Service (Our Service)", num:"",
       action:`No admitting arrangement on file for this PMD. Default per protocol: admit to the <b>Medical Service (Our Service)</b> — verify on EmReference.com or the group chat.`};
   }
-  // Hospitalist service — internal (x4929). Different from Our Service and from the PMD.
-  // Refusable: if the Hospitalist declines, the patient goes straight to the Medical Service.
+  // Hospitalist service — internal (x4929). Different from Medical Service (Our Service) and from the PMD.
+  // Refusable: if the Hospitalist declines, the patient goes straight to the Medical Service (Our Service).
   if(a.startsWith("hospitalist")){
     return {type:"hosp", kick:"Admit under", label:"Hospitalist", icon:"＃", who:"Hospitalist", num:e.anum||"x4929",
       action:`EmReference lists the <b>Hospitalist</b> for this PMD. Admit under the <b>Hospitalist</b> service and call the Hospitalist at <b>${esc(e.anum||"x4929")}</b>.`,
       refusable:true};
   }
-  // Medical Service == Our Service (the resident / teaching service)
+  // Medical Service (Our Service) == Medical Service (Our Service) (the resident / teaching service)
   if(a.includes("medical service")){
-    return {type:"us", kick:"Admit to", label:"Our Service", icon:"☑", who:"Our Service", num:"",
-      action:`EmReference lists the <b>Medical Service</b> — that is <b>our service</b>. Admit to <b>Our Service</b>.`};
+    return {type:"us", kick:"Admit to", label:"Medical Service (Our Service)", icon:"☑", who:"Medical Service (Our Service)", num:"",
+      action:`EmReference lists the <b>Medical Service (Our Service)</b>. Admit to the <b>Medical Service (Our Service)</b>.`};
   }
   if(a.includes("pediatric hospitalist")){
     return {type:"peds", kick:"Route to", label:"Pediatric Hospitalist", icon:"⊕", who:"Pediatric Hospitalist", num:e.anum||"",
@@ -273,9 +273,9 @@ function stepIndex(){
 
 function drawStage(){
   // terminal outcomes ------------------------------------------------
-  if(S.ins===false)               return outcome("us","No insurance / self-pay","Admit to <b>Our Service</b> — we take self-pay patients <b>any day</b>.");
+  if(S.ins===false)               return outcome("us","No insurance / self-pay","Admit to the <b>Medical Service (Our Service)</b> — we take self-pay patients <b>any day</b>.");
   if(S.ins && S.pmd===false)      return outcome("us","Insurance, no PMD listed","No PCP on the Care Team → admit to the <b>Medical Service (Our Service)</b>, regardless of day.");
-  if(S.ins && S.pmd && S.hiv===true) return outcome("us","Our HIV clinic patient","PMD is our <b>HIV clinic</b> → admit to <b>Our Service</b>, any day.");
+  if(S.ins && S.pmd && S.hiv===true) return outcome("us","Our HIV clinic patient","PMD is our <b>HIV clinic</b> → admit to <b>Medical Service (Our Service)</b>, any day.");
 
   if(S.pick){ return pickResult(); }
 
@@ -285,7 +285,7 @@ function drawStage(){
     hint:"Start in the chart: check the insurance status and the Care Team section.",
     opts:[
       {cls:"", ic:"✓", t:"Has insurance", s:"Commercial, Medicare, Medicaid, etc.", go:()=>{S.ins=true;S.step="pmd";render();}},
-      {cls:"flat", ic:"○", t:"No insurance / self-pay", s:"→ Our Service, any day", go:()=>{S.ins=false;render();}}
+      {cls:"flat", ic:"○", t:"No insurance / self-pay", s:"→ Medical Service (Our Service), any day", go:()=>{S.ins=false;render();}}
     ]});
 
   if(S.step==="pmd") return ask({
@@ -302,7 +302,7 @@ function drawStage(){
     hint:"HIV-clinic patients come to us regardless of day.",
     back:()=>{S.pmd=null;S.step="pmd";render();},
     opts:[
-      {cls:"alt", ic:"＋", t:"Yes — our HIV clinic", s:"→ Our Service, any day", go:()=>{S.hiv=true;render();}},
+      {cls:"alt", ic:"＋", t:"Yes — our HIV clinic", s:"→ Medical Service (Our Service), any day", go:()=>{S.hiv=true;render();}},
       {cls:"", ic:"→", t:"No — a regular PMD", s:"Look up who admits for them", go:()=>{S.hiv=false;S.step="look";render();}}
     ]});
 
@@ -371,7 +371,7 @@ function hospCascade(e,d){
        <div class="confirm"><p>Did the Hospitalist accept the admission?</p>
          <div class="crow">
            <button class="cbtn yes" id="hacc">Accepted — Hospitalist admits</button>
-           <button class="cbtn no" id="href">Refused → Medical Service</button>
+           <button class="cbtn no" id="href">Refused → Medical Service (Our Service)</button>
          </div></div>
        ${extraDetail(e)}
        <button class="again" id="again">New patient</button>
@@ -392,22 +392,22 @@ function pickResult(){
   //   Hospitalist refuses (first-line or after no-answer) → Medical Service (Our Service)
   if(d.refusable && S.accepted===false){
     if(d.type==="hosp"){
-      return outcome("us","Hospitalist declined — admit to Medical Service","The <b>Hospitalist</b> <b>declined</b> the admission → admit to the <b>Medical Service (Our Service)</b>.", extraDetail(e));
+      return outcome("us","Hospitalist declined — admit to Medical Service (Our Service)","The <b>Hospitalist</b> <b>declined</b> the admission → admit to the <b>Medical Service (Our Service)</b>.", extraDetail(e));
     }
-    return outcome("us","Attending refused — admit to Medical Service",`<b>${esc(d.who)}</b> picked up and <b>refused</b> the admission → admit to the <b>Medical Service (Our Service)</b>.`, extraDetail(e));
+    return outcome("us","Attending refused — admit to Medical Service (Our Service)",`<b>${esc(d.who)}</b> picked up and <b>refused</b> the admission → admit to the <b>Medical Service (Our Service)</b>.`, extraDetail(e));
   }
   if(d.refusable && S.accepted==="na"){
     if(S.hospAccepted===true){
       return outcome("hosp","Hospitalist accepted","The <b>Hospitalist</b> <b>accepted</b> the admission → admit under the <b>Hospitalist</b> (x4929).", extraDetail(e));
     }
     if(S.hospAccepted===false){
-      return outcome("us","Hospitalist declined — admit to Medical Service",`<b>${esc(d.who)}</b> did not pick up and the <b>Hospitalist</b> <b>declined</b> → admit to the <b>Medical Service (Our Service)</b>.`, extraDetail(e));
+      return outcome("us","Hospitalist declined — admit to Medical Service (Our Service)",`<b>${esc(d.who)}</b> did not pick up and the <b>Hospitalist</b> <b>declined</b> → admit to the <b>Medical Service (Our Service)</b>.`, extraDetail(e));
     }
     return hospCascade(e,d);
   }
-  // EmReference lists "Medical Service" — that is Our Service
+  // EmReference lists "Medical Service (Our Service)" — that is Medical Service (Our Service)
   if(d.type==="us"){
-    return outcome("us","Medical Service = Our Service",d.action, extraDetail(e));
+    return outcome("us","Medical Service (Our Service)",d.action, extraDetail(e));
   }
   const tel=telHref(d.num);
   let contact="";
@@ -430,7 +430,7 @@ function pickResult(){
       <div class="crow">
         <button class="cbtn yes" id="acc">Accepted — they admit</button>
         ${naBtn}
-        <button class="cbtn no" id="ref">Refused → Medical Service</button>
+        <button class="cbtn no" id="ref">Refused → Medical Service (Our Service)</button>
       </div></div>`;
   }
   const colorOf={hosp:"med",med:"med",us:"us",peds:"peds",call:"call"};
@@ -470,7 +470,7 @@ function extraDetail(e){
 
 /* ---- simple outcome (US / fallback) ---- */
 function outcome(type,label,text,extra){
-  const map={us:["☑","Admit to","Our Service"],med:["＋","Assign to","Medical Service"],hosp:["＃","Admit under","Hospitalist"]};
+  const map={us:["☑","Admit to","Medical Service (Our Service)"],med:["＋","Assign to","Medical Service (Our Service)"],hosp:["＃","Admit under","Hospitalist"]};
   const b=map[type]||map.us;
   const color = type==="hosp" ? "med" : type;
   stage.innerHTML=`<div class="res ${color}">
@@ -484,20 +484,20 @@ function outcome(type,label,text,extra){
 
 /* ---- protocol reference ---- */
 document.getElementById('ptable').innerHTML=[
-  ["No insurance / self-pay","us","Our Service"],
-  ["Insurance + no PMD listed","us","Medical Service"],
-  ["Insurance + PMD is our HIV clinic","us","Our Service"],
+  ["No insurance / self-pay","us","Medical Service (Our Service)"],
+  ["Insurance + no PMD listed","us","Medical Service (Our Service)"],
+  ["Insurance + PMD is our HIV clinic","us","Medical Service (Our Service)"],
   ["Insurance + PMD admits here (private or HVA)","call","Call that PMD"],
   ["PMD admits under Pinzon, Amabelle (own group in Passaic — not HVA)","call","Call (862) 249-4901"],
   ["Pinzon answering service doesn't pick up","call","Text Dr. Pinzon's cell"],
   ["Pinzon not working + nobody in her service covering","call","HVA Admitting Team (201) 490-1217"],
   ["Pinzon / her cover / HVA cannot be reached","hosp","Hospitalist (x4929)"],
-  ["Pinzon / her cover / HVA picks up and refuses","us","Medical Service"],
+  ["Pinzon / her cover / HVA picks up and refuses","us","Medical Service (Our Service)"],
   ["Insurance + EmRef lists the Hospitalist","hosp","Hospitalist (x4929)"],
-  ["Insurance + EmRef lists Medical Service (= our service)","us","Our Service"],
+  ["Insurance + EmRef lists Medical Service (Our Service) (= our service)","us","Medical Service (Our Service)"],
   ["HVA or private attending does not pick up","hosp","Hospitalist (x4929)"],
-  ["HVA or private attending picks up and refuses","us","Medical Service"],
-  ["Hospitalist declines","us","Medical Service"],
+  ["HVA or private attending picks up and refuses","us","Medical Service (Our Service)"],
+  ["Hospitalist declines","us","Medical Service (Our Service)"],
 ].map(r=>`<div class="prow"><div class="pcond">${r[0]}</div><span class="pout t-${r[1]}">${r[2]}</span></div>`).join("");
 
 render();
