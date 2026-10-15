@@ -227,13 +227,25 @@ function stale(upd){ if(!upd) return false; const m=upd.match(/(\d{2})\/(\d{2})\
   const d=new Date(+m[3], +m[2]-1, +m[1]); return (Date.now()-d)/(1000*3600*24) > 730; }
 
 /* ---- state & flow ---- */
-let S = {ins:null, pmd:null, hiv:null, pick:null, accepted:null, hospAccepted:null, step:"ins"};
+let S = {ins:null, pmd:null, hiv:null, pick:null, accepted:null, hospAccepted:null, obs:null, shiftOv:null, step:"ins"};
+
+/* ---- Wed/Sat Hospitalist shifts (7 am → 7 am), effective Sat 10/17/26 7 am ----
+   Insured + no PCP + inpatient → Hospitalist. Observation → Medical Service (Our Service). */
+const HOSP_SHIFT_START = new Date(2026, 9, 17, 7, 0, 0);
+const DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+function shiftNow(){
+  const now = new Date();
+  const d = new Date(now); if(now.getHours() < 7) d.setDate(d.getDate()-1);
+  const isHosp = (d.getDay()===3 || d.getDay()===6) && now >= HOSP_SHIFT_START;
+  return {name: DAYS[d.getDay()], isHosp};
+}
+function hospShift(){ return S.shiftOv!=null ? S.shiftOv : shiftNow().isHosp; }
 
 const path=document.getElementById('path');
 const stage=document.getElementById('stage');
 document.getElementById('reset').onclick=reset;
 
-function reset(){ S={ins:null,pmd:null,hiv:null,pick:null,accepted:null,hospAccepted:null,step:"ins"}; render(); }
+function reset(){ S={ins:null,pmd:null,hiv:null,pick:null,accepted:null,hospAccepted:null,obs:null,shiftOv:null,step:"ins"}; render(); }
 
 function render(){ drawPath(); drawStage(); }
 
@@ -245,6 +257,7 @@ function drawPath(){
   const steps=[];
   steps.push(["Insurance", S.ins==null?null:(S.ins?"Has insurance":"No insurance / self-pay")]);
   if(S.ins){ steps.push(["PCP / PMD on Care Team", S.pmd==null?null:(S.pmd?"PMD listed":"None listed")]); }
+  if(S.ins && S.pmd===false && hospShift()){ steps.push(["Inpatient or observation?", S.obs==null?null:(S.obs?"Observation":"Inpatient")]); }
   if(S.ins && S.pmd){ steps.push(["PMD = our HIV clinic?", S.hiv==null?null:(S.hiv?"Yes":"No")]); }
   if(S.ins && S.pmd && S.hiv===false){ steps.push(["PMD lookup", S.pick?S.pick.name:null]); }
   if(S.pick && S.pick.disp && S.pick.disp.refusable && S.accepted!=null){
@@ -264,6 +277,7 @@ function stepIndex(){
   let i=0;
   if(S.ins!=null) i++; if(S.ins===false) return i-1<0?0:i-1+0; // handled by outcome
   if(S.ins){ if(S.pmd!=null) i++; }
+  if(S.ins&&S.pmd===false&&hospShift()){ if(S.obs!=null) i++; }
   if(S.ins&&S.pmd){ if(S.hiv!=null) i++; }
   if(S.ins&&S.pmd&&S.hiv===false){ if(S.pick) i++; }
   if(S.pick&&S.pick.disp&&S.pick.disp.refusable){ if(S.accepted!=null) i++; }
@@ -274,7 +288,22 @@ function stepIndex(){
 function drawStage(){
   // terminal outcomes ------------------------------------------------
   if(S.ins===false)               return outcome("us","No insurance / self-pay","Admit to the <b>Medical Service (Our Service)</b> — we take self-pay patients <b>any day</b>.");
-  if(S.ins && S.pmd===false)      return outcome("us","Insurance, no PMD listed","No PCP on the Care Team → admit to the <b>Medical Service (Our Service)</b>, regardless of day.");
+  if(S.ins && S.pmd===false){
+    const sh=shiftNow();
+    if(!hospShift()) return outcome("us","Insurance, no PMD listed",`No PCP on the Care Team, ${esc(sh.name)} shift (not a Wed/Sat Hospitalist shift) → admit to the <b>Medical Service (Our Service)</b>.`);
+    if(S.obs===true) return outcome("us","Observation — stays with residents","Insured, no PCP, <b>observation</b> → admit to the <b>Medical Service (Our Service)</b>, any day.");
+    if(S.obs===false) return outcome("hosp","Insurance, no PMD — Wed/Sat Hospitalist shift","Insured with no PCP, <b>inpatient</b>, on a <b>Wednesday or Saturday shift</b> (7 am – 7 am) → admit under the <b>Hospitalist</b>. Call the Hospitalist at <b>x4929</b>.");
+    const ov = S.shiftOv===true ? " (set manually)" : "";
+    return ask({
+      q:"Inpatient or observation?",
+      hint:`<b>${esc(sh.name)} shift${ov}</b> — Wednesday and Saturday (7 am – 7 am) are Hospitalist shifts for insured patients with no PCP.`,
+      back:()=>{S.pmd=null;S.obs=null;S.shiftOv=null;S.step="pmd";render();},
+      opts:[
+        {cls:"", ic:"＃", t:"Inpatient", s:"→ Hospitalist (x4929)", go:()=>{S.obs=false;render();}},
+        {cls:"flat", ic:"○", t:"Observation", s:"→ Medical Service (Our Service)", go:()=>{S.obs=true;render();}},
+        {cls:"flat", ic:"↺", t:"Not a Wed/Sat shift", s:"Override the date → Medical Service (Our Service)", go:()=>{S.shiftOv=false;render();}}
+      ]});
+  }
   if(S.ins && S.pmd && S.hiv===true) return outcome("us","Our HIV clinic patient","PMD is our <b>HIV clinic</b> → admit to <b>Medical Service (Our Service)</b>, any day.");
 
   if(S.pick){ return pickResult(); }
@@ -294,7 +323,7 @@ function drawStage(){
     back:()=>{S.ins=null;S.step="ins";render();},
     opts:[
       {cls:"", ic:"✓", t:"Yes — a PMD is listed", s:"We'll look them up next", go:()=>{S.pmd=true;S.step="hiv";render();}},
-      {cls:"flat", ic:"○", t:"No PMD listed", s:"→ Medical Service (Our Service)", go:()=>{S.pmd=false;render();}}
+      {cls:"flat", ic:"○", t:"No PMD listed", s:(hospShift()?"Wed/Sat shift → Hospitalist if inpatient":"→ Medical Service (Our Service)"), go:()=>{S.pmd=false;render();}}
     ]});
 
   if(S.step==="hiv") return ask({
@@ -485,7 +514,9 @@ function outcome(type,label,text,extra){
 /* ---- protocol reference ---- */
 document.getElementById('ptable').innerHTML=[
   ["No insurance / self-pay","us","Medical Service (Our Service)"],
-  ["Insurance + no PMD listed","us","Medical Service (Our Service)"],
+  ["Insurance + no PMD listed (Sun–Tue, Thu–Fri shifts)","us","Medical Service (Our Service)"],
+  ["Insurance + no PMD listed, inpatient, Wed or Sat shift (7 am – 7 am)","hosp","Hospitalist (x4929)"],
+  ["Insurance + no PMD listed, observation (any day)","us","Medical Service (Our Service)"],
   ["Insurance + PMD is our HIV clinic","us","Medical Service (Our Service)"],
   ["Insurance + PMD admits here (private or HVA)","call","Call that PMD"],
   ["PMD admits under Pinzon, Amabelle (own group in Passaic — not HVA)","call","Call (862) 249-4901"],
