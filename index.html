@@ -229,13 +229,13 @@ function stale(upd){ if(!upd) return false; const m=upd.match(/(\d{2})\/(\d{2})\
 /* ---- state & flow ---- */
 let S = {ins:null, pmd:null, hiv:null, pick:null, accepted:null, hospAccepted:null, obs:null, shiftOv:null, step:"ins"};
 
-/* ---- Wed/Sat Hospitalist shifts (7 am → 7 am), effective Sat 10/17/26 7 am ----
+/* ---- Wed/Sat Hospitalist days (midnight → midnight), effective Sat 10/17/26 ----
    Insured + no PCP + inpatient → Hospitalist. Observation → Medical Service (Our Service). */
-const HOSP_SHIFT_START = new Date(2026, 9, 17, 7, 0, 0);
+const HOSP_SHIFT_START = new Date(2026, 9, 17, 0, 0, 0);
 const DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 function shiftNow(){
   const now = new Date();
-  const d = new Date(now); if(now.getHours() < 7) d.setDate(d.getDate()-1);
+  const d = now;
   const isHosp = (d.getDay()===3 || d.getDay()===6) && now >= HOSP_SHIFT_START;
   return {name: DAYS[d.getDay()], isHosp};
 }
@@ -290,18 +290,18 @@ function drawStage(){
   if(S.ins===false)               return outcome("us","No insurance / self-pay","Admit to the <b>Medical Service (Our Service)</b> — we take self-pay patients <b>any day</b>.");
   if(S.ins && S.pmd===false){
     const sh=shiftNow();
-    if(!hospShift()) return outcome("us","Insurance, no PMD listed",`No PCP on the Care Team, ${esc(sh.name)} shift (not a Wed/Sat Hospitalist shift) → admit to the <b>Medical Service (Our Service)</b>.`);
+    if(!hospShift()) return outcome("us","Insurance, no PMD listed",`No PCP on the Care Team, ${esc(sh.name)} (not a Wednesday or Saturday) → admit to the <b>Medical Service (Our Service)</b>.`);
     if(S.obs===true) return outcome("us","Observation — stays with residents","Insured, no PCP, <b>observation</b> → admit to the <b>Medical Service (Our Service)</b>, any day.");
-    if(S.obs===false) return outcome("hosp","Insurance, no PMD — Wed/Sat Hospitalist shift","Insured with no PCP, <b>inpatient</b>, on a <b>Wednesday or Saturday shift</b> (7 am – 7 am) → admit under the <b>Hospitalist</b>. Call the Hospitalist at <b>x4929</b>.");
+    if(S.obs===false) return outcome("hosp","Insurance, no PMD — Wednesday/Saturday","Insured with no PCP, <b>inpatient</b>, on a <b>Wednesday or Saturday</b> (midnight to midnight) → admit under the <b>Hospitalist</b>. Call the Hospitalist at <b>x4929</b>.");
     const ov = S.shiftOv===true ? " (set manually)" : "";
     return ask({
       q:"Inpatient or observation?",
-      hint:`<b>${esc(sh.name)} shift${ov}</b> — Wednesday and Saturday (7 am – 7 am) are Hospitalist shifts for insured patients with no PCP.`,
+      hint:`<b>Today: ${esc(sh.name)}${ov}</b> — on Wednesday and Saturday (midnight to midnight) the Hospitalist admits insured patients with no PCP.`,
       back:()=>{S.pmd=null;S.obs=null;S.shiftOv=null;S.step="pmd";render();},
       opts:[
         {cls:"", ic:"＃", t:"Inpatient", s:"→ Hospitalist (x4929)", go:()=>{S.obs=false;render();}},
         {cls:"flat", ic:"○", t:"Observation", s:"→ Medical Service (Our Service)", go:()=>{S.obs=true;render();}},
-        {cls:"flat", ic:"↺", t:"Not a Wed/Sat shift", s:"Override the date → Medical Service (Our Service)", go:()=>{S.shiftOv=false;render();}}
+        {cls:"flat", ic:"↺", t:"Not Wednesday or Saturday", s:"Override the date → Medical Service (Our Service)", go:()=>{S.shiftOv=false;render();}}
       ]});
   }
   if(S.ins && S.pmd && S.hiv===true) return outcome("us","Our HIV clinic patient","PMD is our <b>HIV clinic</b> → admit to <b>Medical Service (Our Service)</b>, any day.");
@@ -323,7 +323,7 @@ function drawStage(){
     back:()=>{S.ins=null;S.step="ins";render();},
     opts:[
       {cls:"", ic:"✓", t:"Yes — a PMD is listed", s:"We'll look them up next", go:()=>{S.pmd=true;S.step="hiv";render();}},
-      {cls:"flat", ic:"○", t:"No PMD listed", s:(hospShift()?"Wed/Sat shift → Hospitalist if inpatient":"→ Medical Service (Our Service)"), go:()=>{S.pmd=false;render();}}
+      {cls:"flat", ic:"○", t:"No PMD listed", s:(hospShift()?"Wed/Sat → Hospitalist if inpatient":"→ Medical Service (Our Service)"), go:()=>{S.pmd=false;render();}}
     ]});
 
   if(S.step==="hiv") return ask({
@@ -514,8 +514,8 @@ function outcome(type,label,text,extra){
 /* ---- protocol reference ---- */
 document.getElementById('ptable').innerHTML=[
   ["No insurance / self-pay","us","Medical Service (Our Service)"],
-  ["Insurance + no PMD listed (Sun–Tue, Thu–Fri shifts)","us","Medical Service (Our Service)"],
-  ["Insurance + no PMD listed, inpatient, Wed or Sat shift (7 am – 7 am)","hosp","Hospitalist (x4929)"],
+  ["Insurance + no PMD listed (Sun–Tue, Thu–Fri)","us","Medical Service (Our Service)"],
+  ["Insurance + no PMD listed, inpatient, Wed or Sat (midnight to midnight)","hosp","Hospitalist (x4929)"],
   ["Insurance + no PMD listed, observation (any day)","us","Medical Service (Our Service)"],
   ["Insurance + PMD is our HIV clinic","us","Medical Service (Our Service)"],
   ["Insurance + PMD admits here (private or HVA)","call","Call that PMD"],
