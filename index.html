@@ -257,8 +257,8 @@ function drawPath(){
   const steps=[];
   steps.push(["Insurance", S.ins==null?null:(S.ins?"Has insurance":"No insurance / self-pay")]);
   if(S.ins){ steps.push(["PCP / PMD on Care Team", S.pmd==null?null:(S.pmd?"PMD listed":"None listed")]); }
-  if(S.pick && S.pick.disp && S.pick.disp.noArr && hospShift()){ steps.push(["Inpatient or observation?", S.obs==null?null:(S.obs?"Observation":"Inpatient")]); }
-  if(S.ins && S.pmd===false && hospShift()){ steps.push(["Inpatient or observation?", S.obs==null?null:(S.obs?"Observation":"Inpatient")]); }
+  if(S.pick && S.pick.disp && S.pick.disp.type==="us" && hospShift()){ steps.push(["Inpatient or observation?", S.obs==null?null:(S.obs?"Observation > 24 h":"Inpatient")]); }
+  if(S.ins && S.pmd===false && hospShift()){ steps.push(["Inpatient or observation?", S.obs==null?null:(S.obs?"Observation > 24 h":"Inpatient")]); }
   if(S.ins && S.pmd){ steps.push(["PMD = our HIV clinic?", S.hiv==null?null:(S.hiv?"Yes":"No")]); }
   if(S.ins && S.pmd && S.hiv===false){ steps.push(["PMD lookup", S.pick?S.pick.name:null]); }
   if(S.pick && S.pick.disp && S.pick.disp.refusable && S.accepted!=null){
@@ -279,7 +279,7 @@ function stepIndex(){
   if(S.ins!=null) i++; if(S.ins===false) return i-1<0?0:i-1+0; // handled by outcome
   if(S.ins){ if(S.pmd!=null) i++; }
   if(S.ins&&S.pmd===false&&hospShift()){ if(S.obs!=null) i++; }
-  if(S.pick&&S.pick.disp&&S.pick.disp.noArr&&hospShift()){ if(S.obs!=null) i++; }
+  if(S.pick&&S.pick.disp&&S.pick.disp.type==="us"&&hospShift()){ if(S.obs!=null) i++; }
   if(S.ins&&S.pmd){ if(S.hiv!=null) i++; }
   if(S.ins&&S.pmd&&S.hiv===false){ if(S.pick) i++; }
   if(S.pick&&S.pick.disp&&S.pick.disp.refusable){ if(S.accepted!=null) i++; }
@@ -329,16 +329,16 @@ function drawStage(){
 function wedSatGate(why, short, extra, back){
   const sh=shiftNow();
   if(!hospShift()) return outcome("us",short+" — "+sh.name,`${why}, ${esc(sh.name)} (not a Wednesday or Saturday) → admit to the <b>Medical Service (Our Service)</b>.`, extra);
-  if(S.obs===true) return outcome("us","Observation — stays with residents",`${why}, <b>observation</b> → admit to the <b>Medical Service (Our Service)</b>, any day.`, extra);
+  if(S.obs===true) return outcome("us","Observation > 24 h — stays with residents",`${why}, <b>observation expected beyond 24 hours</b> → admit to the <b>Medical Service (Our Service)</b>, any day.`, extra);
   if(S.obs===false) return outcome("hosp",short+" — Wednesday/Saturday",`${why}, <b>inpatient</b>, on a <b>Wednesday or Saturday</b> (midnight to midnight) → admit under the <b>Hospitalist</b>. Call the Hospitalist at <b>x4929</b>.`, extra);
   const ov = S.shiftOv===true ? " (set manually)" : "";
   ask({
-    q:"Inpatient or observation?",
-    hint:`<b>Today: ${esc(sh.name)}${ov}</b> — on Wednesday and Saturday (midnight to midnight) the Hospitalist admits insured patients unless their PCP admits under someone else. ${why}.`,
+    q:"Inpatient or observation beyond 24 hours?",
+    hint:`<b>Today: ${esc(sh.name)}${ov}</b> — on Wednesday and Saturday (midnight to midnight) the Hospitalist admits insured patients unless their PCP is a private attending (admits under their own name) or HVA. ${why}.`,
     back,
     opts:[
       {cls:"", ic:"＃", t:"Inpatient", s:"→ Hospitalist (x4929)", go:()=>{S.obs=false;render();}},
-      {cls:"flat", ic:"○", t:"Observation", s:"→ Medical Service (Our Service)", go:()=>{S.obs=true;render();}},
+      {cls:"flat", ic:"○", t:"Observation beyond 24 hours", s:"→ Medical Service (Our Service)", go:()=>{S.obs=true;render();}},
       {cls:"flat", ic:"↺", t:"Not Wednesday or Saturday", s:"Override the date → Medical Service (Our Service)", go:()=>{S.shiftOv=false;render();}}
     ]});
   if(extra) stage.querySelector('.card').insertAdjacentHTML('beforeend', extra);
@@ -441,6 +441,9 @@ function pickResult(){
     return hospCascade(e,d);
   }
   // EmReference lists "Medical Service (Our Service)" — that is Medical Service (Our Service)
+  if(d.type==="us" && !d.noArr && hospShift()){
+    return wedSatGate("EmReference lists Medical Service for this PCP", "PCP admits to Medical Service", extraDetail(e), ()=>{S.pick=null;S.obs=null;S.shiftOv=null;S.step="look";render();});
+  }
   if(d.noArr){
     return wedSatGate("PCP has no admitting arrangement on file", "No admitting arrangement", extraDetail(e), ()=>{S.pick=null;S.obs=null;S.shiftOv=null;S.step="look";render();});
   }
@@ -526,7 +529,7 @@ document.getElementById('ptable').innerHTML=[
   ["Insurance + no PMD listed (Sun–Tue, Thu–Fri)","us","Medical Service (Our Service)"],
   ["Insurance + no PMD listed, inpatient, Wed or Sat (midnight to midnight)","hosp","Hospitalist (x4929)"],
   ["Insurance + PMD with no admitting arrangement, inpatient, Wed or Sat","hosp","Hospitalist (x4929)"],
-  ["Insurance + no PMD listed, observation (any day)","us","Medical Service (Our Service)"],
+  ["Observation beyond 24 hours (uninsured, no PCP, or PCP not admitting under the Hospitalist), any day","us","Medical Service (Our Service)"],
   ["Insurance + PMD is our HIV clinic","us","Medical Service (Our Service)"],
   ["Insurance + PMD admits here (private or HVA)","call","Call that PMD"],
   ["PMD admits under Pinzon, Amabelle (own group in Passaic — not HVA)","call","Call (862) 249-4901"],
@@ -535,7 +538,8 @@ document.getElementById('ptable').innerHTML=[
   ["Pinzon / her cover / HVA cannot be reached","hosp","Hospitalist (x4929)"],
   ["Pinzon / her cover / HVA picks up and refuses","us","Medical Service (Our Service)"],
   ["Insurance + EmRef lists the Hospitalist","hosp","Hospitalist (x4929)"],
-  ["Insurance + EmRef lists Medical Service (Our Service) (= our service)","us","Medical Service (Our Service)"],
+  ["Insurance + EmRef lists Medical Service (Sun–Tue, Thu–Fri)","us","Medical Service (Our Service)"],
+  ["Insurance + EmRef lists Medical Service, inpatient, Wed or Sat","hosp","Hospitalist (x4929)"],
   ["HVA or private attending does not pick up","hosp","Hospitalist (x4929)"],
   ["HVA or private attending picks up and refuses","us","Medical Service (Our Service)"],
   ["Hospitalist declines","us","Medical Service (Our Service)"],
